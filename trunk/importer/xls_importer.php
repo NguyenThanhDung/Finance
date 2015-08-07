@@ -7,6 +7,7 @@
 date_default_timezone_set("Asia/Saigon");
 
 require("../config.php");
+require("../utils.php");
 
 function __autoload($class_name) {
     include "../classes/".$class_name . '.php';
@@ -22,8 +23,7 @@ function go_to_step($step, $extra_data)
 		break;
 	case 3:
 ?>
-		<form action="xls_importer.php" method="post">
-			<input type="hidden" name="step" value="3" />
+		<form action="xls_importer.php?step=3" method="post">
 			<input type="hidden" name="filename" value="<?php echo $extra_data; ?>"/>
 			<input type="submit" value="Next" />
 		</form>
@@ -31,8 +31,7 @@ function go_to_step($step, $extra_data)
 		break;
 	case 5:
 ?>
-		<form action="xls_importer.php" method="post">
-			<input type="hidden" name="step" value="5" />
+		<form id="add_data_form" action="xls_importer.php?step=5" method="post">
 			<input type="hidden" name="filename" value="<?php echo $extra_data[0]; ?>"/>
 			<input type="hidden" name="import_type" value="<?php echo $extra_data[1]; ?>"/>
 <?php
@@ -55,8 +54,7 @@ function go_to_step($step, $extra_data)
 function show_upload_file_form()
 {
 ?>
-	<form action="xls_importer.php" method="post" enctype="multipart/form-data">
-		<input type="hidden" name="step" value="2" />
+	<form action="xls_importer.php?step=2" method="post" enctype="multipart/form-data">
 		<label for="file">Data file (.csv):</label>
 		<input type="file" name="file" id="file" />
 		<br />
@@ -70,7 +68,8 @@ function upload_file($file_info)
 	if(!isset($file_info))
 		header('Location: xls_importer.php');
 	
-	if($file_info['type'] != "text/csv")
+	DLOG("file type = ".$file_info['type']);
+	if($file_info['type'] != "text/csv" && $file_info['type'] != "application/vnd.ms-excel")
 	{
 		echo "Invalid file type.<br/>";
 		echo "Please upload csv file only.<br/>";
@@ -105,8 +104,7 @@ function ask_kind_of_importing()
 	
 	echo "Which kind of importing do you want to perform?<br/>";
 ?>
-	<form action="xls_importer.php" method="post">
-		<input type="hidden" name="step" value="4" />
+	<form action="xls_importer.php?step=4" method="post">
 		<input type="hidden" name="filename" value="<?php echo $_POST['filename']; ?>"/>
 		<input type="submit" name="submit" value="Clear existing data and import" />
 		<input type="submit" name="submit" value="Merge with existing data" />
@@ -151,7 +149,7 @@ function import_category($filename)
 	for($i = 0; $i < $count; $i++)
 	{
 		$category = new CCategory(0, $categories[$i], 0, null);
-		CCategoryManager::GetInstance()->AddCategory($category);
+		CCategoryManager::AddCategory($category);
 		echo ($i+1) . ". " . $categories[$i] . "<br/>";
 	}
 }
@@ -165,7 +163,7 @@ function import_record($filename, $added_row_count, $last_time, $duplicated_time
 	
 	$file = fopen($filename, "r") or exit("Unable to open file ".$filename);
 	
-	echo "<table border='1' cellspacing='0'>";
+	//echo "<table border='1' cellspacing='0'>";
 	$count = 0;
 	while(!feof($file))
 	{
@@ -181,11 +179,11 @@ function import_record($filename, $added_row_count, $last_time, $duplicated_time
 			break;
 		}
 		
-		echo "<tr>";
+		//echo "<tr>";
 		$cells = parse_line_to_array($line);		
 		if($cells)
 		{
-			$category = CCategoryManager::GetInstance()->GetCategoryByName($cells[1]);
+			$category = CCategoryManager::GetCategoryByName($cells[1]);
 			$category_id = $category->GetId();
 			$detail = $cells[3];
 			$time = $cells[0];
@@ -202,18 +200,18 @@ function import_record($filename, $added_row_count, $last_time, $duplicated_time
 			$amount = $cells[2];
 		
 			$record = new CRecord(0, $category_id, $detail, $time, $amount, null);
-			CRecordManager::GetInstance()->AddRecord($record);
+			CRecordManager::AddRecord($record);
 			
-			echo "<td>$category_id</td>";
-			echo "<td>".$category->GetName()."</td>";
-			echo "<td>$detail&nbsp;</td>";
-			echo "<td>".date("d-m-Y H:i:s", $time)."</td>";
-			echo "<td>$amount</td>";
+// 			echo "<td>$category_id</td>";
+// 			echo "<td>".$category->GetName()."</td>";
+// 			echo "<td>$detail&nbsp;</td>";
+// 			echo "<td>".date("d-m-Y H:i:s", $time)."</td>";
+// 			echo "<td>$amount</td>";
 		}
-		echo "</tr>";
+//		echo "</tr>";
 	}
 	fclose($file);
-	echo "</table>";
+//	echo "</table>";
 	
 	$result = array();
 	$result[0] = $count;
@@ -227,7 +225,9 @@ function parse_line_to_array($line)
 	if(!is_numeric($line[0]))
 		return null;
 		
+	DLOG("line1=$line");
 	$line = convert_seperator($line);
+	DLOG("line2=$line");
 	$cells = explode("|", $line);
 	
 	$cells[0] = parse_time($cells[0]);
@@ -256,13 +256,13 @@ function convert_seperator($string)
 
 function parse_time($date_string)
 {
-	$dates = explode("-", $date_string);
+	$dates = explode("/", $date_string);
 	
 	$dates[2] = intval($dates[2]);
 	$dates[1] = intval($dates[1]);
 	$dates[0] = intval($dates[0]);	
 	
-	return mktime(0, 0, 0, $dates[1], $dates[2], $dates[0]);
+	return mktime(0, 0, 0, $dates[1], $dates[0], $dates[2]);
 }
 
 function parse_amount($amount_string)
@@ -287,14 +287,21 @@ function parse_amount($amount_string)
 		}
 		
 		$amount = substr($amount, $index, $len);
-		$amount = implode(explode(",", $amount));
 	}
+	$amount = implode(explode(".", $amount));
 	return intval($amount);
 }
 
 function parse_description($desc_string)
 {
+	DLOG("desc_string='$desc_string'");
 	$desc = $desc_string;
+	
+	if(isset($desc)==false || strlen($desc)==0)
+	{
+		return "";
+	}
+	
 	if($desc[0] == '"')
 	{
 		$len = strlen($desc);
@@ -317,7 +324,7 @@ function add_data($conn, $config, $categoryId, $detail, $time, $amount, $descrip
 <body>
 
 <?php
-/*$categories = CCategoryManager::GetInstance()->GetAllCategories();
+/*$categories = CCategoryManager::GetAllCategories();
 echo "Category list:<br/>";
 echo "<table border='1' cellspacing='0'>";
 foreach($categories as $category)
@@ -415,7 +422,7 @@ $added_row_count = $row_count;*/
 </form>-->
 
 <?php
-$step = isset($_POST['step']) ? $_POST['step'] : 1;
+$step = isset($_GET['step']) ? $_GET['step'] : 1;
 switch($step)
 {
 case 1:
@@ -441,7 +448,7 @@ case 3:
 case 4:
 	if($_POST['submit'] == "Clear existing data and import")
 	{
-		if(!CCategoryManager::GetInstance()->ClearAllCategories())
+		if(!CCategoryManager::ClearAllCategories())
 			break;
 		echo "Cleared all categories.<br/>";
 		$import_type = "override";
@@ -475,7 +482,7 @@ case 5:
 	{
 		if($import_type == "override" && $added_row_count == 0)
 		{
-			if(!CRecordManager::GetInstance()->ClearAllRecords())
+			if(!CRecordManager::ClearAllRecords())
 				break;
 			echo "Cleared all records.<br/>";
 		}
@@ -486,15 +493,37 @@ case 5:
 	}
 	
 	$result = import_record($filename, $added_row_count, $last_time, $duplicated_time_count);
-	echo "Added row from $added_row_count to ".$result[0]."<br/>";
 	
-	$extra_data = array();
-	$extra_data[0] = $filename;		// name of uploaded file
-	$extra_data[1] = $import_type;	// type of importing
-	$extra_data[2] = $result[0];	// number of added rows
-	$extra_data[3] = $result[1];	// time of recent added row
-	$extra_data[4] = $result[2];	// number of duplicated
-	go_to_step(5, $extra_data);
+	if($added_row_count == $result[0])	//Finish
+	{
+		echo "Finish import $filename<br/>";
+		echo "$added_row_count records were added.<br/><br/>";
+
+		echo "<a href='xls_importer.php'>Import other file</a>";
+	}
+	else
+	{
+		echo "Addding records from $added_row_count to ".$result[0]."<br/>";
+		
+		echo "<img alt='loading' src='../image/loading.gif' />";
+		
+		$extra_data = array();
+		$extra_data[0] = $filename;		// name of uploaded file
+		$extra_data[1] = $import_type;	// type of importing
+		$extra_data[2] = $result[0];	// number of added rows
+		$extra_data[3] = $result[1];	// time of recent added row
+		$extra_data[4] = $result[2];	// number of duplicated
+		go_to_step(5, $extra_data);
+		
+?>
+		<!-- Auto add next records -->
+		<script type="text/javascript">
+		setTimeout(function () {
+			document.getElementById('add_data_form').submit();
+		},5000);
+		</script>
+<?php
+	}
 	break;
 	
 default:

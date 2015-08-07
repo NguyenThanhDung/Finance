@@ -1,68 +1,57 @@
 <?php
 class CCategoryManager
 {
-	static $instance;
-	var $data;
-	var $count;
+	static $data;
+	static $count;
 	
-	static function GetInstance()
+	static function LoadData()
 	{
-		if(!self::$instance)
-		{
-			self::$instance = new CCategoryManager();
-		}
-		return self::$instance;
-	}
-	
-	function CCategoryManager()
-	{
-		$this->data = 0;
-		$this->count = 0;
+		self::$data = 0;
+		self::$count = 0;
 		
-		$this->LoadData();
-	}
-	
-	function LoadData()
-	{
 		$sql = "SELECT * FROM category ORDER BY Name";
-		$categories = CDataManager::GetInstance()->ExercuseQuery($sql);
+		$categories = CDataManager::ExercuseQuery($sql);
 		
 		// Fetch data
 		while($row = mysql_fetch_array($categories))
 		{
-			if(!$this->data)
-				$this->data = array();
+			if(!self::$data)
+				self::$data = array();
 				
-			$this->data[$this->count] = new CCategory($row['Id'], 
+			self::$data[self::$count] = new CCategory($row['Id'], 
 											$row['Name'],
 											$row['Receipt'],
 											$row['Description']);
 			
-			$this->count++;
+			self::$count++;
 		}
 	}
 	
-	function GetAllCategories()
+	static function GetAllCategories()
 	{
-		return $this->data;
+		self::LoadData();
+		return self::$data;
 	}
 	
-	function GetNumberOfCategory()
+	static function GetNumberOfCategory()
 	{
-		return $this->count;
+		self::LoadData();
+		return self::$count;
 	}
 	
-	function GetCategoryByIndex($index)
+	static function GetCategoryByIndex($index)
 	{
-		return $this->data[$index];
+		self::LoadData();
+		return self::$data[$index];
 	}
 	
-	function GetCategoryById($id)
+	static function GetCategoryById($id)
 	{
+		self::LoadData();
 		$i = 0;
-		while($i < $this->count)
+		while($i < self::$count)
 		{
-			$category = $this->data[$i];
+			$category = self::$data[$i];
 			if($category->GetId() == $id)
 				return $category;				
 			$i++;
@@ -70,12 +59,13 @@ class CCategoryManager
 		return null;
 	}
 	
-	function GetCategoryByName($name)
+	static function GetCategoryByName($name)
 	{
+		self::LoadData();
 		$i = 0;
-		while($i < $this->count)
+		while($i < self::$count)
 		{
-			$category = $this->data[$i];
+			$category = self::$data[$i];
 			if($category->GetName() == $name)
 				return $category;				
 			$i++;
@@ -83,39 +73,77 @@ class CCategoryManager
 		return null;
 	}	
 	
-	function AddCategory($category)
+	static function AddCategory($category)
 	{
+		$does_exist = self::DoesCategoryExist($category);
+		if($does_exist)
+			return 0;
+		
 		$sql = "INSERT INTO category (Name,Receipt,Description) 
 				VALUES ('".$category->GetName()."',
 						".$category->IsReceipt().",
 						'".$category->GetDescription()."')";
-		return CDataManager::GetInstance()->ExercuseQuery($sql);
+		return CDataManager::ExercuseQuery($sql);
 	}
 	
-	function UpdateCategory($category)
+	static function UpdateCategory($category)
 	{
 		$sql = "UPDATE category 
 				SET Name = '".$category->GetName()."', 
 					Receipt = ".$category->IsReceipt().", 
 					Description = '".$category->GetDescription()."'
 				WHERE Id = ".$category->GetId();
-		return CDataManager::GetInstance()->ExercuseQuery($sql);
+		return CDataManager::ExercuseQuery($sql);
 	}
 	
-	function DeleteCategory($id)
+	static function DeleteCategory($id)
 	{
 		$sql = "DELETE FROM category WHERE Id=$id";
-		return CDataManager::GetInstance()->ExercuseQuery($sql);
+		return CDataManager::ExercuseQuery($sql);
 	}
 	
-	function ClearAllCategories()
+	static function DoesCategoryExist($new_category)
+	{
+		self::LoadData();
+		
+		$does_exist = FALSE;
+		for($i = 0; $i < self::$count; $i++)
+		{
+			if($new_category->GetName() == self::$data[$i]->GetName())
+			{
+				$does_exist = TRUE;
+				break;
+			}
+		}		
+		return $does_exist;
+	}
+	
+	static function ClearAllCategories()
 	{
 		$sql = "DELETE FROM category";
-		if(!CDataManager::GetInstance()->ExercuseQuery($sql))
+		if(!CDataManager::ExercuseQuery($sql))
 			return 0;
 		
 		$sql = "ALTER TABLE category AUTO_INCREMENT=1";
-		return CDataManager::GetInstance()->ExercuseQuery($sql);
+		return CDataManager::ExercuseQuery($sql);
+	}
+	
+	static function CreateTable()
+	{
+		$sql = "CREATE TABLE category(
+					Id int NOT NULL AUTO_INCREMENT,
+					Name varchar(255) NOT NULL,
+					Receipt int NOT NULL DEFAULT 0,
+					Description varchar(1024),
+					PRIMARY KEY (Id)
+				) ENGINE=InnoDB DEFAULT CHARSET=utf8";
+		return CDataManager::ExercuseQuery($sql);
+	}
+	
+	static function DropTable()
+	{
+		$sql = "DROP TABLE IF EXISTS category";
+		return CDataManager::ExercuseQuery($sql);
 	}
 }
 ?>
